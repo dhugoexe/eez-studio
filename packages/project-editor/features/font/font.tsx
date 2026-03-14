@@ -2327,12 +2327,17 @@ export class Font extends EezObject {
             let result;
 
             const projectStore = ProjectEditor.getProjectStore(this);
+
             result =
                 projectStore.fontsCacheStore.getCachedFontDefinition(
                     extractFontParams
                 );
+
             if (!result) {
-                result = await extractFont(extractFontParams);
+                try {
+                    result = await extractFont(extractFontParams);
+                } catch (err) {
+                }
             }
 
             if (result && result.lvglBinFile && result.lvglSourceFile) {
@@ -2340,10 +2345,15 @@ export class Font extends EezObject {
                 const sourceFile = result.lvglSourceFile;
 
                 runInAction(() => {
-                    this._lvglFontDefinition = {
-                        binFile,
-                        sourceFile
-                    };
+                    if (this._lvglFontDefinition) {
+                        this._lvglFontDefinition.binFile = binFile;
+                        this._lvglFontDefinition.sourceFile = sourceFile;
+                    } else {
+                        this._lvglFontDefinition = {
+                            binFile,
+                            sourceFile
+                        };
+                    }
                 });               
             } else {
                 runInAction(() => {

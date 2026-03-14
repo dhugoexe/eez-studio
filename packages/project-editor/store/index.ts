@@ -690,6 +690,10 @@ export class ProjectStore {
     async doSave() {
         if (!this.project._isDashboardBuild) {
             await save(this, this.filePath!);
+
+            if (this.fontsCacheStore) {
+                await this.fontsCacheStore.save();
+            }
         }
 
         runInAction(() => {
@@ -908,10 +912,6 @@ export class ProjectStore {
 
         if (this.uiStateStore) {
             await this.uiStateStore.save();
-        }
-
-        if (this.fontsCacheStore) {
-            await this.fontsCacheStore.save();
         }
 
         if (this.project) {
