@@ -749,7 +749,7 @@ export function getAddItemName(object: IEezObject) {
     if (parent == project.actions) {
         return "User Action";
     }
-    if (getParent(parent) == project.lvglStyles) {
+    if (getParent(parent) == project.lvglStyles || getParent(parent) instanceof ProjectEditor.LVGLStyleClass) {
         return "Style";
     }
 

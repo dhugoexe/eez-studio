@@ -816,6 +816,19 @@ export class LVGLStylesDefinition extends EezObject {
                                     state
                                 )}(), ${color});`
                             );
+
+                            const lvglStyles = getChildStyles(lvglStyle, part, state, propertyName);
+                            for (const childLvglStyle of lvglStyles) {
+                                build.line(
+                                    `lv_style_set_${build.getStylePropName(
+                                        propertyInfo.name
+                                    )}(${build.getGetStyleFunctionName(
+                                        childLvglStyle,
+                                        part,
+                                        state
+                                    )}(), ${color});`
+                                );
+                            }
                         }
                     );
                 } else if (
@@ -967,4 +980,21 @@ export function extractAnimProperties(value: any) {
     }
     return { setDelay, setRepeatDelay, setRepeatCount, delay, repeatDelay, repeatCount };
 }
+
 ////////////////////////////////////////////////////////////////////////////////
+
+function getChildStyles(lvglStyle: LVGLStyle, part: string, state: string, propertyName: string): LVGLStyle[] {
+    const lvglStyles = [];
+
+    for (const childLvglStyle of lvglStyle.childStyles) {
+        if (childLvglStyle.definition.definition?.[part]?.[state]?.[propertyName] == undefined) {
+            lvglStyles.push(childLvglStyle);
+        }
+    }
+
+    for (const childLvglStyle of lvglStyle.childStyles) {
+        lvglStyles.push(...getChildStyles(childLvglStyle, part, state, propertyName));
+    }
+
+    return lvglStyles;
+}

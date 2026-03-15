@@ -488,6 +488,16 @@ const ColorPicker = observer(
             } else {
                 innerCf.formatType = ColorFormatType.THEME_NAME;
                 innerCf.name = name;
+                const tc = this.props.themeColors.find(c => c.name === name);
+                if (tc) {
+                    const parsed = parseColorString(tc.colorValue);
+                    if (parsed) {
+                        innerCf.r = parsed.r;
+                        innerCf.g = parsed.g;
+                        innerCf.b = parsed.b;
+                    }
+                }
+
             }
             const hsv = innerCf.getHsv();
             this.hue = hsv.h;
@@ -1329,7 +1339,7 @@ export const ThemedColorInput = observer(
 
             const colorFormat =
                 this.currentColorFormat
-                    ? this.currentColorFormat
+                    ? ColorFormat.parse(this.currentColorFormat.toString(), this.context.project)
                     : ColorFormat.parse(colorValue, this.context.project);
 
             let portal;
