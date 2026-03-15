@@ -300,13 +300,13 @@ export const LVGL_STATE_CODES = {
     DISABLED: lvglStates.DISABLED,
     FOCUSED: lvglStates.FOCUSED,
     FOCUS_KEY: lvglStates.FOCUS_KEY,
-    PRESSED: lvglStates.PRESSED
+    PRESSED: lvglStates.PRESSED,
+    HOVERED: lvglStates.HOVERED
 };
 
 export const LVGL_STATE_CODES_MORE = {
     DEFAULT: lvglStates.DEFAULT,
     EDITED: lvglStates.EDITED,
-    HOVERED: lvglStates.HOVERED,
     SCROLLED: lvglStates.SCROLLED,
     USER1: lvglStates.USER_1,
     USER2: lvglStates.USER_2,
@@ -320,13 +320,13 @@ export const LVGL_STATE_CODES_V9_5_0 = {
     DISABLED: lvglStates_V9_5_0.DISABLED,
     FOCUSED: lvglStates_V9_5_0.FOCUSED,
     FOCUS_KEY: lvglStates_V9_5_0.FOCUS_KEY,
-    PRESSED: lvglStates_V9_5_0.PRESSED
+    PRESSED: lvglStates_V9_5_0.PRESSED,
+    HOVERED: lvglStates_V9_5_0.HOVERED
 };
 
 export const LVGL_STATE_CODES_MORE_V9_5_0 = {
     DEFAULT: lvglStates_V9_5_0.DEFAULT,
     EDITED: lvglStates_V9_5_0.EDITED,
-    HOVERED: lvglStates_V9_5_0.HOVERED,
     SCROLLED: lvglStates_V9_5_0.SCROLLED,
     USER1: lvglStates_V9_5_0.USER_1,
     USER2: lvglStates_V9_5_0.USER_2,
@@ -349,6 +349,7 @@ export const LVGL_STYLE_STATES = [
     "FOCUSED",
     "FOCUS_KEY",
     "EDITED",
+    "HOVERED",
     "SCROLLED"
 ];
 
