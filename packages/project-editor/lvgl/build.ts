@@ -1929,12 +1929,14 @@ export class LVGLBuild extends Build {
         build.blockEnd("};");
 
         build.blockStart("void tick_screen(int screen_index) {");
+        build.blockStart(`if (screen_index >= 0 && screen_index < ${this.userPages.length}) {`)
         build.line("tick_screen_funcs[screen_index]();");
+        build.blockEnd(`}`)
         build.blockEnd("}");
 
         build.blockStart("void tick_screen_by_id(enum ScreensEnum screenId) {");
-        build.line("tick_screen_funcs[screenId - 1]();");
-        build.blockEnd("}");
+        build.line("tick_screen(screenId - 1);");
+        build.blockEnd(`}`)
 
         build.line("");
 
