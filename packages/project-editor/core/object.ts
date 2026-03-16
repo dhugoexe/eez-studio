@@ -91,7 +91,8 @@ export const enum ProjectType {
     APPLET = "applet",
     DASHBOARD = "dashboard",
     LVGL = "lvgl",
-    IEXT = "iext"
+    IEXT = "iext",
+    EEZ_GUI_LITE = "eez-gui-lite"
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -298,6 +299,8 @@ export interface PropertyInfo {
 
     showArrayCollapsedByDefaultInPropertyGrid?: boolean;
     hideElementIndexInPropertyGrid?: boolean;
+
+    noColSpanForArray?: boolean;
 }
 
 export type InheritedValue =

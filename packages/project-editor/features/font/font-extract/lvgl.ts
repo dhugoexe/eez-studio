@@ -1,15 +1,14 @@
 import type {
-    Params,
+    ExtractFontParams,
     FontProperties,
     GlyphProperties,
     IFontExtract
 } from "project-editor/features/font/font-extract";
 
 import fs from "fs";
+import path from "path";
 import { getName, NamingConvention } from "project-editor/build/helper";
-const collectFontData = require("lv_font_conv/lib/collect_font_data");
-const getFontBinData = require("lv_font_conv/lib/writers/bin");
-const getFontSourceData = require("lv_font_conv/lib/writers/lvgl");
+import * as notification from "eez-studio-ui/notification";
 
 let extractBusy = false;
 
@@ -18,7 +17,7 @@ export class ExtractFont implements IFontExtract {
     allEncodings: number[];
     fontData: any;
 
-    constructor(private params: Params) {}
+    constructor(private params: ExtractFontParams) {}
 
     async start() {
         let source_bin = this.params.embeddedFontFile
@@ -36,10 +35,10 @@ export class ExtractFont implements IFontExtract {
 
         const symbols = this.params.symbols ?? "";
 
-        const font = [
+        const font: any[] = [
             {
                 source_path: this.params.absoluteFilePath,
-                source_bin,
+                source_bin_base64: source_bin.toString("base64"),
                 ranges: [
                     {
                         range,
@@ -48,6 +47,38 @@ export class ExtractFont implements IFontExtract {
                 ]
             }
         ];
+
+        if (this.params.additionalSources) {
+            for (const additionalSource of this.params.additionalSources) {
+                const addSourceBin = additionalSource.embeddedFontFile
+                    ? Buffer.from(additionalSource.embeddedFontFile, "base64")
+                    : fs.readFileSync(additionalSource.absoluteFilePath);
+
+                const addRange: number[] = [];
+                if (additionalSource.encodings) {
+                    additionalSource.encodings.map(encodingRange =>
+                        addRange.push(
+                            encodingRange.from,
+                            encodingRange.to,
+                            encodingRange.mapped_from ?? encodingRange.from
+                        )
+                    );
+                }
+
+                const addSymbols = additionalSource.symbols ?? "";
+
+                font.push({
+                    source_path: additionalSource.absoluteFilePath,
+                    source_bin_base64: addSourceBin.toString("base64"),
+                    ranges: [
+                        {
+                            range: addRange,
+                            symbols: addSymbols
+                        }
+                    ]
+                });
+            }
+        }
 
         const output = getName(
             "ui_font_",
@@ -71,7 +102,10 @@ export class ExtractFont implements IFontExtract {
             opts_string: this.params.opts_string,
             lv_fallback: this.params.lv_fallback
                 ? this.params.lv_fallback
-                : undefined
+                : undefined,
+            // stride: 1,
+            // align: 1,
+            // no_kerning: true
         };
 
         // wait for !extractBusy
@@ -86,40 +120,81 @@ export class ExtractFont implements IFontExtract {
 
         extractBusy = true;
 
-        this.fontData = await collectFontData(args);
+        const fontName = this.params.name || "font";
+        const toastId = notification.info(
+            `Extracting font "${fontName}"...`,
+            { autoClose: false, isLoading: true }
+        );
 
-        // get font bin file
-        const bin: Buffer = getFontBinData(args, this.fontData)[output];
-        const lvglBinFile = bin.toString("base64");
+        try {
+            const workerResult = await new Promise<any>((resolve, reject) => {
+                const workerPath = path.join(
+                    __dirname,
+                    "lvgl-worker.js"
+                );
+                const worker = new Worker(workerPath);
 
-        // get font C file
-        const source: Buffer = getFontSourceData(args, this.fontData)[output];
-        const lvglSourceFile = source.toString("base64");
+                worker.onmessage = (e: MessageEvent) => {
+                    worker.terminate();
+                    if (e.data.error) {
+                        reject(new Error(e.data.error));
+                    } else {
+                        resolve(e.data);
+                    }
+                };
 
-        extractBusy = false;
+                worker.onerror = (e: ErrorEvent) => {
+                    worker.terminate();
+                    reject(new Error(e.message));
+                };
 
-        this.fontProperties = {
-            name: this.params.name || "",
-            renderingEngine: "LVGL",
-            source: {
-                filePath: this.params.relativeFilePath,
-                size: this.params.size,
-                threshold: this.params.threshold
-            },
-            embeddedFontFile: source_bin.toString("base64"),
-            bpp: this.params.bpp,
-            threshold: this.params.threshold,
-            height: this.fontData.ascent - this.fontData.descent,
-            ascent: this.fontData.ascent,
-            descent: -this.fontData.descent,
-            glyphs: [],
-            lvglGlyphs: {
-                encodings: this.params.encodings!,
-                symbols
-            },
-            lvglBinFile,
-            lvglSourceFile
-        };
+                worker.postMessage({ args, output });
+            });
+
+            this.fontData = workerResult.fontData;
+            const lvglBinFile = workerResult.lvglBinFile;
+            const lvglSourceFile = workerResult.lvglSourceFile;
+
+            this.fontProperties = {
+                name: this.params.name || "",
+                renderingEngine: "LVGL",
+                source: {
+                    filePath: this.params.relativeFilePath,
+                    size: this.params.size,
+                    threshold: this.params.threshold
+                },
+                embeddedFontFile: source_bin.toString("base64"),
+                bpp: this.params.bpp,
+                threshold: this.params.threshold,
+                height: this.fontData.ascent - this.fontData.descent,
+                ascent: this.fontData.ascent,
+                descent: -this.fontData.descent,
+                glyphs: [],
+                lvglGlyphs: {
+                    encodings: this.params.encodings!,
+                    symbols
+                },
+                lvglBinFile,
+                lvglSourceFile
+            };
+
+            notification.update(toastId!, {
+                render: `Font "${fontName}" extracted successfully.`,
+                type: notification.SUCCESS,
+                isLoading: false,
+                autoClose: 1000
+            });
+        } catch (err: any) {
+            notification.update(toastId!, {
+                render: `Font "${fontName}" extraction failed: ${err.message}`,
+                type: notification.ERROR,
+                isLoading: false,
+                autoClose: false
+            });
+            throw err;
+        } finally {
+            extractBusy = false;
+        }
     }
 
     getAllGlyphs = () => {

@@ -8,10 +8,10 @@ import {
     observable,
     action
 } from "mobx";
-import tinycolor from "tinycolor2";
 
 import type { Page } from "project-editor/features/page/page";
 import type { IWasmFlowRuntime } from "eez-studio-types";
+import { getColorRGB } from "eez-studio-shared/color";
 import { ProjectEditor } from "project-editor/project-editor-interface";
 import type { Bitmap } from "project-editor/features/bitmap/bitmap";
 import type { Font } from "project-editor/features/font/font";
@@ -51,7 +51,8 @@ import {
 import type { IFlowContext } from "project-editor/flow/flow-interfaces";
 import {
     LVGLStylePropCode,
-    LVGL_CONSTANTS_ALL
+    LVGL_CONSTANTS_ALL,
+    LVGL_CONSTANTS_ALL_95
 } from "project-editor/lvgl/lvgl-constants";
 import {
     BUILT_IN_FONTS,
@@ -68,6 +69,7 @@ import {
     getName
 } from "project-editor/build/helper";
 import { SimulatorLVGLCode } from "project-editor/lvgl/to-lvgl-code";
+import { ColorFormat } from "project-editor/features/style/color-format";
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -130,7 +132,12 @@ export abstract class LVGLPageRuntime {
 
     reset() {
         this.wasm = undefined as any;
-        this.toLVGLCode = new SimulatorLVGLCode(this, LVGL_CONSTANTS_ALL);
+        this.toLVGLCode = new SimulatorLVGLCode(
+            this,
+            this.isLVGLVersion(["9.5.0"])
+                ? LVGL_CONSTANTS_ALL_95
+                : LVGL_CONSTANTS_ALL
+        );
         this.isMounted = false;
         this.bitmapsCache = new Map();
         this.fontsCache = new Map();
@@ -308,14 +315,16 @@ export abstract class LVGLPageRuntime {
             
             if (!font.lvglUseFreeType) {
                 cashedFont = this.fontsCache.get(font);
-                if (!cashedFont || cashedFont.lvglBinFile != font.lvglBinFile) {
+
+                const lvglBinFile = font.getLvglBinFile();
+
+                if (!cashedFont || cashedFont.lvglBinFile != lvglBinFile) {
                     if (cashedFont) {
                         this.wasm._lvglFreeFont(cashedFont.fontPtr);
                         this.fontsCache.delete(font);
                         this.fontAddressToFont.delete(cashedFont.fontPtr);
                     }
 
-                    const lvglBinFile = font.lvglBinFile;
                     if (lvglBinFile) {
                         const bin = Buffer.from(lvglBinFile, "base64");
 
@@ -565,23 +574,12 @@ export abstract class LVGLPageRuntime {
         return selectedTheme.colors[index];
     }
 
-    getThemedColor(colorValue: string) {
-        if (typeof colorValue != "string" || colorValue.startsWith("#")) {
-            return { colorValue, isFromTheme: false };
-        }
+    parseColor(color: string) {
+        let cf = ColorFormat.parse(color, this.project, (color: string) => {
+            return this.getThemedColorInProject(color);
+        });
 
-        let color = this.getThemedColorInProject(colorValue);
-        if (color) {
-            return { colorValue: color, isFromTheme: true };
-        }
-
-        return { colorValue, isFromTheme: false };
-    }
-
-    colorRgbToNum(color: string) {
-        const { colorValue, isFromTheme } = this.getThemedColor(color);
-
-        const rgb = tinycolor(colorValue).toRgb();
+        let rgb = cf.getRgb();
 
         // result is in BGR format
         let result = (rgb.b << 0) | (rgb.g << 8) | (rgb.r << 16) | (255 << 24);
@@ -589,11 +587,11 @@ export abstract class LVGLPageRuntime {
         // signed to unsigned
         result = result >>> 0;
 
-        return { colorNum: result, isFromTheme };
+        return { colorNum: result, isFromTheme: cf.isUsingThemeColor };
     }
 
     getColorNum(color: string) {
-        const { colorNum } = this.colorRgbToNum(color);
+        const { colorNum } = this.parseColor(color);
         return colorNum;
     }
 
@@ -601,13 +599,13 @@ export abstract class LVGLPageRuntime {
         color: string,
         callback: (wasm: IWasmFlowRuntime, colorNum: number) => void
     ) {
-        const { colorNum, isFromTheme } = this.colorRgbToNum(color);
+        const { colorNum, isFromTheme } = this.parseColor(color);
         callback(this.wasm, colorNum);
         if (isFromTheme && !this.isEditor) {
             this.changeColorCallbacks.push({
                 page: this.page,
                 callback: () => {
-                    const { colorNum } = this.colorRgbToNum(color);
+                    const { colorNum } = this.parseColor(color);
                     callback(this.wasm, colorNum);
                 }
             });
@@ -618,13 +616,13 @@ export abstract class LVGLPageRuntime {
         color: string,
         callback: (wasm: IWasmFlowRuntime, colorNum: number) => void
     ) {
-        const { colorNum, isFromTheme } = this.colorRgbToNum(color);
+        const { colorNum, isFromTheme } = this.parseColor(color);
         callback(this.wasm, colorNum);
         if (isFromTheme && !this.isEditor) {
             this.changeColorCallbacks.push({
                 page: undefined,
                 callback: () => {
-                    const { colorNum } = this.colorRgbToNum(color);
+                    const { colorNum } = this.parseColor(color);
                     callback(this.wasm, colorNum);
                 }
             });
@@ -635,12 +633,12 @@ export abstract class LVGLPageRuntime {
         color: string,
         callback: (wasm: IWasmFlowRuntime, colorNum: number) => void
     ) {
-        const { isFromTheme } = this.colorRgbToNum(color);
+        const { isFromTheme } = this.parseColor(color);
         if (isFromTheme && !this.isEditor) {
             this.changeColorCallbacks.push({
                 page: this.page,
                 callback: () => {
-                    const { colorNum } = this.colorRgbToNum(color);
+                    const { colorNum } = this.parseColor(color);
                     callback(this.wasm, colorNum);
                 }
             });
@@ -1197,7 +1195,7 @@ export class LVGLPageViewerRuntime extends LVGLPageRuntime {
 
                 for (let j = 0; j < this.project.colors.length; j++) {
                     const colorValue = theme.colors[j];
-                    const rgb = tinycolor(colorValue).toRgb();
+                    const rgb = getColorRGB(colorValue);
 
                     // result is in BGR format
                     let colorNum =

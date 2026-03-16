@@ -12,7 +12,8 @@ import {
     LV_DIR_LEFT,
     LV_DIR_BOTTOM,
     LV_DIR_RIGHT,
-    lvglStates
+    lvglStates,
+    lvglStates_V9_5_0
 } from "project-editor/lvgl/lvgl-constants";
 
 import { LVGLWidget } from "./internal";
@@ -157,10 +158,17 @@ export class LVGLDropdownWidget extends LVGLWidget {
         code.createObject(`lv_dropdown_create`);
 
         // options
-        code.callObjectFunction(
-            "lv_dropdown_set_options",
-            code.stringProperty(this.optionsType, this.options)
-        );
+        if (this.optionsType == "literal" && code.lvglBuild) {
+            code.callObjectFunction(
+                "lv_dropdown_set_options_static",
+                code.stringProperty(this.optionsType, this.options)
+            );
+        } else {
+            code.callObjectFunction(
+                "lv_dropdown_set_options",
+                code.stringProperty(this.optionsType, this.options)
+            );
+        }
 
         if (this.optionsType == "expression") {
             code.addToTick("options", () => {
@@ -229,7 +237,7 @@ export class LVGLDropdownWidget extends LVGLWidget {
                 } else {
                     if (
                         code.callObjectFunction("lv_obj_get_state") &
-                        lvglStates.EDITED
+                        (code.isLVGLVersion(["9.5.0"]) ? lvglStates_V9_5_0.EDITED : lvglStates.EDITED)
                     ) {
                         return;
                     }

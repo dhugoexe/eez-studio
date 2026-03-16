@@ -43,7 +43,8 @@ import {
     LVGL_WITH_FLOW_PROJECT_ICON,
     MICROPYTHON_ICON,
     APPLET_ICON,
-    IEXT_PROJECT_ICON
+    IEXT_PROJECT_ICON,
+    EEZ_GUI_LITE_PROJECT_ICON
 } from "project-editor/ui-components/icons";
 import {
     EEZ_PROJECT_EXAMPLES_REPOSITORY,
@@ -120,7 +121,7 @@ interface IProjectType {
     resourceFiles?: string[];
     projectFileUrl?:
         | string
-        | { "8.4.0": string; "9.2.2": string; "9.3.0": string; "9.4.0": string; }
+        | { "8.4.0": string; "9.2.2": string; "9.3.0": string; "9.4.0": string; "9.5.0": string; }
         | { SCPI: string; PROPRIETARY: string };
 
     author?: string;
@@ -781,6 +782,9 @@ export class WizardModel {
                     ),
                     "9.4.0": getTemplatePathOrUrl(
                         "templates/v0.23.0/LVGL-9.0.eez-project"
+                    ),
+                    "9.5.0": getTemplatePathOrUrl(
+                        "templates/v0.23.0/LVGL-9.0.eez-project"
                     )
                 }
             },
@@ -803,6 +807,9 @@ export class WizardModel {
                     ),
                     "9.4.0": getTemplatePathOrUrl(
                         "templates/v0.23.0/LVGL with EEZ Flow-9.0.eez-project"
+                    ),
+                    "9.5.0": getTemplatePathOrUrl(
+                        "templates/v0.23.0/LVGL with EEZ Flow-9.0.eez-project"
                     )
                 }
             },
@@ -818,6 +825,16 @@ export class WizardModel {
                         "templates/IEXT - PROPRIETARY.eez-project"
                     )
                 }
+            },
+            {
+                id: "EEZ-GUI Lite",
+                projectType: PROJECT_TYPE_NAMES[ProjectType.EEZ_GUI_LITE],
+                image: EEZ_GUI_LITE_PROJECT_ICON(128),
+                projectName: "EEZ-GUI Lite",
+                description: "Start your new EEZ-GUI Lite project development here.",
+                projectFileUrl: getTemplatePathOrUrl(
+                    "templates/eez-gui-lite.eez-project"
+                )
             }
         ].filter(projectType => this.searchFilter(projectType));
     }
@@ -2269,7 +2286,8 @@ const ProjectProperties = observer(
                                                     (wizardModel.lvglVersion =
                                                         event.target.value == "9.2.2" ||
                                                         event.target.value == "9.3.0" || 
-                                                        event.target.value == "9.4.0"
+                                                        event.target.value == "9.4.0" || 
+                                                        event.target.value == "9.5.0"
                                                             ? event.target.value
                                                             : "8.4.0")
                                             )}
@@ -2279,6 +2297,7 @@ const ProjectProperties = observer(
                                             <option value="9.2.2">9.2.2</option>
                                             <option value="9.3.0">9.3.0</option>
                                             <option value="9.4.0">9.4.0</option>
+                                            <option value="9.5.0">9.5.0</option>
                                         </select>
                                     </div>
                                 )}

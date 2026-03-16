@@ -57,6 +57,7 @@ import { NavigationStore } from "project-editor/store/navigation";
 import { EditorsStore } from "project-editor/store/editor";
 import { LayoutModels } from "project-editor/store/layout-models";
 import { UIStateStore } from "project-editor/store/ui-state";
+import { FontsCacheStore } from "project-editor/store/fonts-cache";
 import { RuntimeSettings } from "project-editor/store/runtime-settings";
 import { UndoManager } from "project-editor/store/undo-manager";
 import { OutputSections, Section } from "project-editor/store/output-sections";
@@ -175,6 +176,8 @@ export class ProjectStore {
     runtimeModeEditorsStore: EditorsStore;
     uiStateStore: UIStateStore;
 
+    fontsCacheStore: FontsCacheStore;
+
     runtimeSettings = new RuntimeSettings(this);
     outputSectionsStore = new OutputSections(this);
     typesStore = new TypesStore(this);
@@ -256,6 +259,8 @@ export class ProjectStore {
             );
 
             this.uiStateStore = new UIStateStore(this);
+
+            this.fontsCacheStore = new FontsCacheStore(this);
         }
 
         makeObservable<ProjectStore>(this, {
@@ -548,8 +553,6 @@ export class ProjectStore {
             this.startSearch();
         }
 
-        this.dispose5 = autorun(() => this.typesStore.reset());
-
         this.dispose3 = autorun(
             () => {
                 // check the project in the background
@@ -564,6 +567,8 @@ export class ProjectStore {
                 delay: 100
             }
         );
+
+        this.dispose5 = autorun(() => this.typesStore.reset());
     }
 
     get title() {
@@ -700,6 +705,10 @@ export class ProjectStore {
     async doSave() {
         if (!this.project._isDashboardBuild) {
             await save(this, this.filePath!);
+
+            if (this.fontsCacheStore) {
+                await this.fontsCacheStore.save();
+            }
         }
 
         runInAction(() => {
@@ -987,6 +996,10 @@ export class ProjectStore {
             await this.uiStateStore.load();
         }
 
+        if (this.fontsCacheStore) {
+            await this.fontsCacheStore.load();
+        }
+
         await this.runtimeSettings.load();
 
         runInAction(() => {
@@ -1236,7 +1249,11 @@ export class ProjectStore {
         let runtime: RuntimeBase;
 
         if (this.projectTypeTraits.runtimeType == RuntimeType.WASM) {
-            runtime = new ProjectEditor.WasmRuntimeClass(this);
+            if (this.projectTypeTraits.isEezGuiLite) {
+                runtime = new ProjectEditor.EezGuiLiteWasmRuntimeClass(this);
+            } else {
+                runtime = new ProjectEditor.WasmRuntimeClass(this);
+            }
         } else if (this.projectTypeTraits.runtimeType == RuntimeType.REMOTE) {
             runtime = new ProjectEditor.RemoteRuntimeClass(this);
         } else {

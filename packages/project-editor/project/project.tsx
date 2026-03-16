@@ -463,21 +463,6 @@ export class Build extends EezObject {
             if (jsObject.fileSystemPath == undefined) {
                 jsObject.fileSystemPath = "";
             }
-        },
-
-        updateObjectValueHook: (build: Build, values: Partial<Build>) => {
-            const projectStore = getProjectStore(build);
-            if (
-                projectStore.projectTypeTraits.isLVGL &&
-                values.lvglInclude != undefined &&
-                build.lvglInclude != values.lvglInclude
-            ) {
-                ProjectEditor.rebuildLvglFonts(
-                    projectStore,
-                    projectStore.project.settings.general.lvglVersion,
-                    values.lvglInclude
-                );
-            }
         }
     };
 
@@ -782,10 +767,11 @@ export const PROJECT_TYPE_NAMES = {
     [ProjectType.APPLET]: "BB3 Applet",
     [ProjectType.DASHBOARD]: "Dashboard",
     [ProjectType.LVGL]: "LVGL",
-    [ProjectType.IEXT]: "IEXT"
+    [ProjectType.IEXT]: "IEXT",
+    [ProjectType.EEZ_GUI_LITE]: "EEZ-GUI Lite"
 };
 
-export type LVGLVersion = "8.4.0" | "9.2.2" | "9.3.0" | "9.4.0";
+export type LVGLVersion = "8.4.0" | "9.2.2" | "9.3.0" | "9.4.0" | "9.5.0";
 
 export class General extends EezObject {
     projectVersion: ProjectVersion = "v3";
@@ -822,6 +808,7 @@ export class General extends EezObject {
     dimmedLinesOpacity: number;
 
     embedFonts: boolean;
+    cacheFonts: boolean;
 
     static classInfo: ClassInfo = {
         label: () => "General",
@@ -911,7 +898,8 @@ export class General extends EezObject {
                     { id: "8.4.0", label: "8.4.0" },
                     { id: "9.2.2", label: "9.2.2" },
                     { id: "9.3.0", label: "9.3.0" },
-                    { id: "9.4.0", label: "9.4.0" }
+                    { id: "9.4.0", label: "9.4.0" },
+                    { id: "9.5.0", label: "9.5.0" }
                 ],
                 enumDisallowUndefined: true,
                 disabled: (general: General) =>
@@ -1063,6 +1051,15 @@ export class General extends EezObject {
             {
                 name: "embedFonts",
                 displayName: "Embed fonts inside eez-project file",
+                type: PropertyType.Boolean,
+                checkboxStyleSwitch: true,
+                disabled: (general: General) => {
+                    return general.projectType != ProjectType.LVGL;
+                }
+            },
+            {
+                name: "cacheFonts",
+                displayName: "Cache font definitions",
                 type: PropertyType.Boolean,
                 checkboxStyleSwitch: true,
                 disabled: (general: General) => {
@@ -1274,20 +1271,9 @@ export class General extends EezObject {
             if (jsObject.embedFonts == undefined) {
                 jsObject.embedFonts = true;
             }
-        },
 
-        updateObjectValueHook: (general: General, values: Partial<General>) => {
-            const projectStore = getProjectStore(general);
-            if (
-                projectStore.projectTypeTraits.isLVGL &&
-                values.lvglVersion != undefined &&
-                general.lvglVersion != values.lvglVersion
-            ) {
-                ProjectEditor.rebuildLvglFonts(
-                    projectStore,
-                    values.lvglVersion,
-                    projectStore.project.settings.build.lvglInclude
-                );
+            if (jsObject.cacheFonts == undefined) {
+                jsObject.cacheFonts = false;
             }
         }
     };
@@ -1322,7 +1308,8 @@ export class General extends EezObject {
             commandsProtocol: observable,
             hiddenWidgetLines: observable,
             dimmedLinesOpacity: observable,
-            embedFonts: observable
+            embedFonts: observable,
+            cacheFonts: observable
         });
     }
 }

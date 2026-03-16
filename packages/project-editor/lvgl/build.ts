@@ -15,6 +15,7 @@ import { Section, getAncestorOfType } from "project-editor/store";
 import type { LVGLUserWidgetWidget, LVGLWidget } from "./widgets";
 import type { Assets } from "project-editor/build/assets";
 import { isDev } from "eez-studio-shared/util-electron";
+import { getColorRGB } from "eez-studio-shared/color";
 import { writeTextFile, writeBinaryData } from "project-editor/build/build";
 import type { LVGLStyle } from "project-editor/lvgl/style";
 import {
@@ -29,13 +30,13 @@ import {
 import { sourceRootDir } from "eez-studio-shared/util";
 import { getSelectorBuildCode } from "project-editor/lvgl/style-helper";
 import type { LVGLGroup } from "./groups";
-import tinycolor from "tinycolor2";
 import { GENERATED_NAME_PREFIX } from "./identifiers";
 import { escapeCString, isGeometryControlledByParent } from "./widget-common";
 import { BuildLVGLCode } from "project-editor/lvgl/to-lvgl-code";
 import { cleanupSourceFile } from "project-editor/build/cleanup-c-source-files";
 import { BUILT_IN_FONTS } from "project-editor/lvgl/style-catalog";
 import { visitObjects } from "project-editor/core/search";
+import { ColorFormat, ColorFormatType } from "project-editor/features/style/color-format";
 
 interface Identifiers {
     identifiers: string[];
@@ -193,10 +194,7 @@ export class LVGLBuild extends Build {
     }
 
     markObjectAccessibleFromSourceCode(widget: LVGLWidget) {
-        const page = getAncestorOfType(
-            widget,
-            ProjectEditor.PageClass.classInfo
-        ) as Page;
+        const page = ProjectEditor.getPage(widget);
 
         if (page.isUsedAsUserWidget) {
             let widgets =
@@ -393,10 +391,7 @@ export class LVGLBuild extends Build {
             return true;
         }
 
-        let page = getAncestorOfType(
-            widget,
-            ProjectEditor.PageClass.classInfo
-        ) as Page;
+        let page = ProjectEditor.getPage(widget);
 
         if (page.isUsedAsUserWidget) {
             return (
@@ -563,10 +558,7 @@ export class LVGLBuild extends Build {
     }
 
     getPageIdentifiers(object: IEezObject) {
-        const flow = getAncestorOfType(
-            object,
-            ProjectEditor.FlowClass.classInfo
-        );
+        const flow = ProjectEditor.getFlow(object);
         if (
             flow instanceof ProjectEditor.PageClass &&
             flow.isUsedAsUserWidget
@@ -698,28 +690,19 @@ export class LVGLBuild extends Build {
     }
 
     getEventHandlerCallbackName(widget: LVGLWidget) {
-        const page = getAncestorOfType(
-            widget,
-            ProjectEditor.PageClass.classInfo
-        ) as Page;
+        const page = ProjectEditor.getPage(widget);
         return `event_handler_cb_${this.getScreenIdentifier(page)}_${this.getLvglObjectIdentifierInSourceCode(widget)}`;
     }
 
     getCheckedEventHandlerCallbackName(widget: LVGLWidget) {
-        const page = getAncestorOfType(
-            widget,
-            ProjectEditor.PageClass.classInfo
-        ) as Page;
+        const page = ProjectEditor.getPage(widget);
         return `event_handler_checked_cb_${this.getScreenIdentifier(
             page
         )}_${this.getLvglObjectIdentifierInSourceCode(widget)}`;
     }
 
     getUncheckedEventHandlerCallbackName(widget: LVGLWidget) {
-        const page = getAncestorOfType(
-            widget,
-            ProjectEditor.PageClass.classInfo
-        ) as Page;
+        const page = ProjectEditor.getPage(widget);
         return `event_handler_unchecked_cb_${this.getScreenIdentifier(
             page
         )}_${this.getLvglObjectIdentifierInSourceCode(widget)}`;
@@ -834,28 +817,55 @@ export class LVGLBuild extends Build {
     }
 
     getColorAccessor(color: string, themeIndex: string) {
-        let colorValue;
-        if (color.startsWith("#")) {
-            colorValue = color;
-        } else {
-            const colorIndex = this.project.colorToIndexMap.get(color);
+        const cf = ColorFormat.parse(color, this.project);
+
+        if (cf.formatType == ColorFormatType.THEME_NAME) {
+            const colorIndex = this.project.colorToIndexMap.get(cf.name);
             if (colorIndex != undefined) {
                 return {
-                    colorAccessor: `theme_colors[${themeIndex}][${colorIndex}]`,
+                    colorAccessor: `lv_color_hex(theme_colors[${themeIndex}][${colorIndex}])`,
                     fromTheme: true
                 };
             }
-            colorValue = color;
+        } else if (cf.formatType == ColorFormatType.DARKEN || cf.formatType == ColorFormatType.LIGHTEN) {
+            let innerColor;
+            let fromTheme;
+
+            if (cf.innerColor!.formatType == ColorFormatType.THEME_NAME) {
+                const colorIndex = this.project.colorToIndexMap.get(cf.innerColor!.name);
+                if (colorIndex != undefined) {
+                    innerColor = `lv_color_hex(theme_colors[${themeIndex}][${colorIndex}])`;
+                    fromTheme = true;
+                }
+            }
+
+            if (innerColor == undefined) {
+                innerColor = cf.innerColor!.getHexNumString();
+                fromTheme = false;
+            }
+
+            let colorAccessor;
+            let level = cf.levelFormat == "decimal" ? cf.level : Math.min(Math.max(Math.round(cf.level * 255 / 100), 0), 255);
+            if (cf.formatType == ColorFormatType.DARKEN) {
+                colorAccessor = `lv_color_darken(lv_color_hex(${innerColor}), ${level})`;
+            } else {
+                colorAccessor = `lv_color_lighten(lv_color_hex(${innerColor}), ${level})`;
+            }
+
+            return {
+                colorAccessor,
+                fromTheme
+            }
         }
 
         return {
-            colorAccessor: this.getColorHexStr(colorValue),
+            colorAccessor: `lv_color_hex(${cf.getHexNumString()})`,
             fromTheme: false
         };
     }
 
     getColorHexStr(colorValue: string) {
-        const rgb = tinycolor(colorValue).toRgb();
+        const rgb = getColorRGB(colorValue);
 
         // result is in BGR format
         let colorNum =
@@ -1229,11 +1239,7 @@ export class LVGLBuild extends Build {
     buildWidgetSetPosAndSize(widget: LVGLWidget) {
         const build = this;
         if (widget instanceof ProjectEditor.LVGLScreenWidgetClass) {
-            const page = getAncestorOfType(
-                widget,
-                ProjectEditor.PageClass.classInfo
-            ) as Page;
-
+            const page = ProjectEditor.getPage(widget);
             build.line(`lv_obj_set_pos(obj, ${page.left}, ${page.top});`);
             build.line(`lv_obj_set_size(obj, ${page.width}, ${page.height});`);
         } else if (isGeometryControlledByParent(widget)) {
@@ -1923,12 +1929,14 @@ export class LVGLBuild extends Build {
         build.blockEnd("};");
 
         build.blockStart("void tick_screen(int screen_index) {");
+        build.blockStart(`if (screen_index >= 0 && screen_index < ${this.userPages.length}) {`)
         build.line("tick_screen_funcs[screen_index]();");
+        build.blockEnd(`}`)
         build.blockEnd("}");
 
         build.blockStart("void tick_screen_by_id(enum ScreensEnum screenId) {");
-        build.line("tick_screen_funcs[screenId - 1]();");
-        build.blockEnd("}");
+        build.line("tick_screen(screenId - 1);");
+        build.blockEnd(`}`)
 
         build.line("");
 
@@ -2370,13 +2378,7 @@ export class LVGLBuild extends Build {
         ) => UpdateColorCallbackForPage | undefined = (page: Page) => {
             const updateColorCallbacks = this.updateColorCallbacks.filter(
                 updateColorCallback => {
-                    return (
-                        page ==
-                        getAncestorOfType<Page>(
-                            updateColorCallback.object,
-                            ProjectEditor.PageClass.classInfo
-                        )
-                    );
+                    return page == ProjectEditor.getPage(updateColorCallback.object);
                 }
             );
 
@@ -3127,7 +3129,7 @@ ${source}`;
                             "binary" &&
                         !font.lvglUseFreeType
                     ) {
-                        const lvglBinaryFileBase64 = font.lvglBinFile;
+                        const lvglBinaryFileBase64 = await font.getLvglBinFileAsync();
                         const lvglBinaryFile = lvglBinaryFileBase64
                             ? Buffer.from(lvglBinaryFileBase64, "base64")
                             : undefined;

@@ -38,8 +38,7 @@ import {
     getSelectorBuildCode,
     getSelectorCode
 } from "project-editor/lvgl/style-helper";
-import { getThemedColor } from "project-editor/features/style/theme";
-import { isValid } from "eez-studio-shared/color";
+import { ColorFormat } from "project-editor/features/style/color-format";
 import type { LVGLStyle } from "./style";
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -335,18 +334,18 @@ export class LVGLStylesDefinition extends EezObject {
                                     this.definition[part][state][propertyName];
 
                                 if (color) {
-                                    const colorValue = getThemedColor(
-                                        projectStore,
-                                        color
-                                    ).colorValue;
-
-                                    if (!isValid(colorValue)) {
+                                    if (!ColorFormat.isValid(color, projectStore.project)) {
                                         const valueObject =
                                             EezValueObject.create(
                                                 this,
                                                 propertyInfo,
-                                                color
+                                                ["definition", part, state, propertyName]
                                             );
+
+                                        setKey(
+                                            valueObject,
+                                            `definition.${part}.${state}.${propertyName}`
+                                        );
 
                                         messages.push(
                                             new Message(
@@ -655,7 +654,7 @@ export class LVGLStylesDefinition extends EezObject {
                                     build.line(
                                         `lv_obj_set_style_${build.getStylePropName(
                                             propertyInfo.name
-                                        )}(obj, lv_color_hex(${color}), ${selectorCode});`
+                                        )}(obj, ${color}, ${selectorCode});`
                                     );
                                 },
                                 (color: string, obj) => {
@@ -666,13 +665,13 @@ export class LVGLStylesDefinition extends EezObject {
                                         build.line(
                                             `if (${obj}) lv_obj_set_style_${build.getStylePropName(
                                                 propertyInfo.name
-                                            )}(${obj}, lv_color_hex(${color}), ${selectorCode});`
+                                            )}(${obj}, ${color}, ${selectorCode});`
                                         );
                                     } else {
                                         build.line(
                                             `lv_obj_set_style_${build.getStylePropName(
                                                 propertyInfo.name
-                                            )}(${obj}, lv_color_hex(${color}), ${selectorCode});`
+                                            )}(${obj}, ${color}, ${selectorCode});`
                                         );
                                     }
                                 }
@@ -804,7 +803,7 @@ export class LVGLStylesDefinition extends EezObject {
                             build.line(
                                 `lv_style_set_${build.getStylePropName(
                                     propertyInfo.name
-                                )}(style, lv_color_hex(${color}));`
+                                )}(style, ${color});`
                             );
                         },
                         color => {
@@ -815,8 +814,21 @@ export class LVGLStylesDefinition extends EezObject {
                                     lvglStyle,
                                     part,
                                     state
-                                )}(), lv_color_hex(${color}));`
+                                )}(), ${color});`
                             );
+
+                            const lvglStyles = getChildStyles(lvglStyle, part, state, propertyName);
+                            for (const childLvglStyle of lvglStyles) {
+                                build.line(
+                                    `lv_style_set_${build.getStylePropName(
+                                        propertyInfo.name
+                                    )}(${build.getGetStyleFunctionName(
+                                        childLvglStyle,
+                                        part,
+                                        state
+                                    )}(), ${color});`
+                                );
+                            }
                         }
                     );
                 } else if (
@@ -968,4 +980,21 @@ export function extractAnimProperties(value: any) {
     }
     return { setDelay, setRepeatDelay, setRepeatCount, delay, repeatDelay, repeatCount };
 }
+
 ////////////////////////////////////////////////////////////////////////////////
+
+function getChildStyles(lvglStyle: LVGLStyle, part: string, state: string, propertyName: string): LVGLStyle[] {
+    const lvglStyles = [];
+
+    for (const childLvglStyle of lvglStyle.childStyles) {
+        if (childLvglStyle.definition.definition?.[part]?.[state]?.[propertyName] == undefined) {
+            lvglStyles.push(childLvglStyle);
+        }
+    }
+
+    for (const childLvglStyle of lvglStyle.childStyles) {
+        lvglStyles.push(...getChildStyles(childLvglStyle, part, state, propertyName));
+    }
+
+    return lvglStyles;
+}

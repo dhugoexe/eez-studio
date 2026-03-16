@@ -380,6 +380,10 @@ export const builtInFunctions: {
             expressionContext: IExpressionContext | undefined,
             ...args: any[]
         ) => {
+            if (expressionContext && expressionContext.flowState) {
+                return expressionContext.flowState.runtime.getTick();
+            }
+
             return Date.now();
         },
         getValueType: (...args: ValueType[]) => {
@@ -1456,6 +1460,34 @@ export const builtInFunctions: {
         operationIndex: 69,
         arity: 0,
         args: [],
+        eval: (
+            expressionContext: IExpressionContext | undefined,
+            ...args: any[]
+        ) => 0,
+        getValueType: (...args: ValueType[]) => {
+            return "integer";
+        },
+        enabled: projectStore => projectStore.projectTypeTraits.isLVGL
+    },
+
+    "LVGL.colorDarken": {
+        operationIndex: 91,
+        arity: 2,
+        args: ["color", "level"],
+        eval: (
+            expressionContext: IExpressionContext | undefined,
+            ...args: any[]
+        ) => 0,
+        getValueType: (...args: ValueType[]) => {
+            return "integer";
+        },
+        enabled: projectStore => projectStore.projectTypeTraits.isLVGL
+    },
+
+    "LVGL.colorLighten": {
+        operationIndex: 92,
+        arity: 2,
+        args: ["color", "level"],
         eval: (
             expressionContext: IExpressionContext | undefined,
             ...args: any[]

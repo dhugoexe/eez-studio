@@ -9,6 +9,7 @@ import {
 } from "project-editor/core/object";
 
 import { ProjectType } from "project-editor/project/project";
+import { ProjectEditor } from "project-editor/project-editor-interface";
 
 import { specificGroup } from "project-editor/ui-components/PropertyGrid/groups";
 
@@ -18,10 +19,18 @@ import type { LVGLCode } from "project-editor/lvgl/to-lvgl-code";
 
 ////////////////////////////////////////////////////////////////////////////////
 
+const CALENDAR_HEADER_TYPES = {
+    None: 0,
+    Arrow: 1,
+    Dropdown: 2
+};
+
 export class LVGLCalendarWidget extends LVGLWidget {
     todayYear: number;
     todayMonth: number;
     todayDay: number;
+    header: keyof typeof CALENDAR_HEADER_TYPES;
+    chineseMode: boolean;
 
     static classInfo = makeDerivedClassInfo(LVGLWidget.classInfo, {
         enabledInComponentPalette: (projectType: ProjectType, projectStore) =>
@@ -47,6 +56,28 @@ export class LVGLCalendarWidget extends LVGLWidget {
                 displayName: "Day",
                 type: PropertyType.Number,
                 propertyGridGroup: specificGroup
+            },
+            {
+                name: "header",
+                type: PropertyType.Enum,
+                enumItems: Object.keys(CALENDAR_HEADER_TYPES).map(id => ({
+                    id,
+                    label: id
+                })),
+                enumDisallowUndefined: true,
+                propertyGridGroup: specificGroup
+            },
+            {
+                name: "chineseMode",
+                type: PropertyType.Boolean,
+                checkboxStyleSwitch: true,
+                propertyGridGroup: specificGroup,
+                disabled: (widget: LVGLCalendarWidget) => {
+                    const lvglVersion =
+                        ProjectEditor.getProject(widget).settings.general
+                            .lvglVersion;
+                    return lvglVersion == "8.4.0";
+                }
             }
         ],
 
@@ -58,7 +89,18 @@ export class LVGLCalendarWidget extends LVGLWidget {
             clickableFlag: true,
             todayYear: 2022,
             todayMonth: 11,
-            todayDay: 1
+            todayDay: 1,
+            header: "Arrow",
+            chineseMode: false
+        },
+
+        beforeLoadHook: (object: LVGLCalendarWidget, jsObject: any) => {
+            if (jsObject.header == undefined) {
+                jsObject.header = "Arrow";
+            }
+            if (jsObject.chineseMode == undefined) {
+                jsObject.chineseMode = false;
+            }
         },
 
         icon: (
@@ -140,17 +182,35 @@ export class LVGLCalendarWidget extends LVGLWidget {
         makeObservable(this, {
             todayYear: observable,
             todayMonth: observable,
-            todayDay: observable
+            todayDay: observable,
+            header: observable,
+            chineseMode: observable
         });
     }
 
     override toLVGLCode(code: LVGLCode) {
-            code.createObject("lv_calendar_create");
+        code.createObject("lv_calendar_create");
 
-        if (code.isLVGLVersion(["8.", "9.2"])) {
-            code.callObjectFunction("lv_calendar_header_arrow_create");
-        } else {
-            code.callObjectFunction("lv_calendar_add_header_arrow");
+        if (this.header === "Arrow") {
+            if (code.isLVGLVersion(["8.4.0", "9.2.2"])) {
+                code.callObjectFunction(
+                    "lv_calendar_header_arrow_create"
+                );
+            } else {
+                code.callObjectFunction(
+                    "lv_calendar_add_header_arrow"
+                );
+            }
+        } else if (this.header === "Dropdown") {
+            if (code.isLVGLVersion(["8.4.0", "9.2.2"])) {
+                code.callObjectFunction(
+                    "lv_calendar_header_dropdown_create"
+                );
+            } else {
+                code.callObjectFunction(
+                    "lv_calendar_add_header_dropdown"
+                );
+            }
         }
 
         code.callObjectFunction(
@@ -171,7 +231,14 @@ export class LVGLCalendarWidget extends LVGLWidget {
                 "lv_calendar_set_month_shown",
                 this.todayYear,
                 this.todayMonth
-            );  
+            );
+        }
+
+        if (this.chineseMode && code.isLVGLVersion(["9."])) {
+            code.callObjectFunction(
+                "lv_calendar_set_chinese_mode",
+                code.constant("true")
+            );
         }
     }
 }

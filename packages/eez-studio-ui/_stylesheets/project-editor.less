@@ -582,10 +582,7 @@
 .EezStudio_ThemedColorInput_DropdownContent {
     background: transparent;
     border: none;
-
-    .w-color-chrome {
-        color: #333;
-    }
+    padding: 0;
 }
 
 .EezStudio_ObjectReferenceInput_DropdownButton {
@@ -4313,4 +4310,14 @@
     height: 100%;
     color: var(--bs-secondary);
     font-style: italic;
+}
+
+.EezStudio_ProjectEditor_TextsNavigation {
+    .btn-toolbar {
+        display: flex;
+    }
+}
+
+.EezStudio_ArrayElementProperty_Body_Property>.editGlyphs>div>div:first-child {
+    display: none;
 }
