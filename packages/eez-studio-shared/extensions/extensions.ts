@@ -11,7 +11,8 @@ import {
     readJsObjectFromFile,
     removeFolder,
     renameFile,
-    readFolder
+    readFolder,
+    isRenderer
 } from "eez-studio-shared/util-electron";
 import { guid } from "eez-studio-shared/guid";
 import { firstWord } from "eez-studio-shared/string";
@@ -61,9 +62,9 @@ async function loadExtension(
                     if (mainScript) {
                         // this is measurement functions extension
                         extensionType = "measurement-functions";
-                        extension = require(extensionFolderPath +
-                            "/" +
-                            mainScript).default;
+                        extension = require(
+                            extensionFolderPath + "/" + mainScript
+                        ).default;
                     } else if (
                         packageJsonEezStudio[CONF_NODE_MODULE_PROPERTY_NAME]
                     ) {
@@ -125,21 +126,134 @@ async function loadExtension(
     return undefined;
 }
 
-export type FromProcess = IExtensionApi["fromProcess"];
+let extensionApi: IExtensionApi | undefined;
 
-// Which process is loading extensions. Both the main process (main/setup.ts)
-// and the renderer (home/main.tsx) load the installed extensions;
-// initExtension uses this to tell them apart. Renderer is the default so
-// existing entry points keep their current behavior.
-let fromProcess: FromProcess = "renderer";
+function getExtensionApi(): IExtensionApi {
+    if (!extensionApi) {
+        if (isRenderer()) {
+            extensionApi = {
+                renderer: {
+                    requireModule: (name: string) => {
+                        if (name == "mobx") {
+                            return require("mobx");
+                        } else {
+                            throw new Error(
+                                `module not exported to extensions: ${name}`
+                            );
+                        }
+                    },
+                    // The tabs-store singleton is created lazily by loadTabs()
+                    // (after loadExtensions), so the module has to be required
+                    // inside the calls — capturing its exports at
+                    // extension-registration time would freeze `tabs` at
+                    // undefined.
+                    getOpenProjects: () => {
+                        const { tabs, ProjectEditorTab } =
+                            require("home/tabs-store") as typeof import("home/tabs-store");
+                        return tabs.tabs
+                            .filter(tab => tab instanceof ProjectEditorTab)
+                            .map(tab => ({
+                                name: path.basename(tab.filePath ?? ""),
+                                filePath: tab.filePath,
+                                active: tab === tabs.activeTab
+                            }));
+                    },
+                    getActiveProjectStore: () => {
+                        const { tabs, ProjectEditorTab } =
+                            require("home/tabs-store") as typeof import("home/tabs-store");
+                        return tabs.activeTab instanceof ProjectEditorTab
+                            ? tabs.activeTab.projectStore
+                            : undefined;
+                    },
+                    activateProjectTab: (filePath: string) => {
+                        const { tabs, ProjectEditorTab } =
+                            require("home/tabs-store") as typeof import("home/tabs-store");
+                        const normalize = (p?: string) =>
+                            p?.replace(/\\/g, "/").toLowerCase();
+                        const tab = tabs.tabs.find(
+                            tab =>
+                                tab instanceof ProjectEditorTab &&
+                                normalize(tab.filePath) ===
+                                    normalize(filePath)
+                        );
+                        if (!tab) {
+                            throw new Error(
+                                `no open project tab for ${filePath}`
+                            );
+                        }
+                        if (tabs.activeTab !== tab) {
+                            tab.makeActive();
+                        }
+                    },
+                    openProject: (filePath: string, runMode?: boolean) => {
+                        const { openProject } =
+                            require("home/tabs-store") as typeof import("home/tabs-store");
+                        return openProject(filePath, !!runMode);
+                    },
+                    // Toolkits below re-export project-editor symbols the
+                    // same lazy way — required at call time, so nothing is
+                    // frozen at extension-registration time.
+                    // 下述 toolkit 同样在调用时才 require，避免注册期冻结导出。
+                    getEditorObjectToolkit: () => {
+                        const store =
+                            require("project-editor/store") as typeof import("project-editor/store");
+                        const object =
+                            require("project-editor/core/object") as typeof import("project-editor/core/object");
+                        const search =
+                            require("project-editor/core/search") as typeof import("project-editor/core/search");
+                        return {
+                            createObject: store.createObject,
+                            getClassByName: object.getClassByName,
+                            getClassesDerivedFrom: object.getClassesDerivedFrom,
+                            getDefaultValue: object.getDefaultValue,
+                            setParent: object.setParent,
+                            visitObjects: search.visitObjects,
+                            getObjectPath: store.getObjectPath,
+                            getObjectPathAsString: store.getObjectPathAsString
+                        };
+                    },
+                    getLvglToolkit: () => ({
+                        LVGLWidget:
+                            require("project-editor/lvgl/widgets/Base").LVGLWidget,
+                        LVGLStyle: require("project-editor/lvgl/style").LVGLStyle,
+                        Page: require("project-editor/features/page/page").Page,
+                        Color:
+                            require("project-editor/features/style/theme").Color,
+                        BUILT_IN_FONTS:
+                            require("project-editor/lvgl/style-catalog")
+                                .BUILT_IN_FONTS
+                    }),
+                    getAssetToolkit: () => {
+                        const font =
+                            require("project-editor/features/font/font") as any;
+                        const fontExtract =
+                            require("project-editor/features/font/font-extract") as any;
+                        const bitmap =
+                            require("project-editor/features/bitmap/bitmap") as any;
+                        return {
+                            Font: font.Font,
+                            extractFont: fontExtract.extractFont,
+                            getLvglEncodingsAndSymbols:
+                                font.getLvglEncodingsAndSymbols,
+                            Bitmap: bitmap.Bitmap,
+                            createBitmap: bitmap.createBitmap
+                        };
+                    }
+                }
+            };
+        } else {
+            extensionApi = {
+                main: {}
+            };
+        }
+    }
 
-export function setExtensionsFromProcess(value: FromProcess) {
-    fromProcess = value;
+    return extensionApi;
 }
 
 export function registerExtension(extension: IExtension) {
     if (extension.init) {
-        extension.init({ fromProcess });
+        extension.init(getExtensionApi());
     }
 
     action(() => extensions.set(extension.id, extension))();
